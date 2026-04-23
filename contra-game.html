@@ -685,6 +685,8 @@
             }
 
             update(groundY, platforms, player) {
+                if (this.x < -150) return;
+                
                 this.x -= this.speed;
 
                 this.velocityY += CONFIG.GRAVITY;
@@ -697,44 +699,53 @@
                     this.isGrounded = true;
                 }
 
-                for (const platform of platforms) {
-                    if (this.checkPlatformCollision(platform)) {
-                        if (this.velocityY > 0) {
-                            this.y = platform.y - this.height;
-                            this.velocityY = 0;
-                            this.isGrounded = true;
+                if (platforms.length > 0) {
+                    for (const platform of platforms) {
+                        if (platform.x + platform.width < this.x - 50 || platform.x > this.x + this.width + 50) {
+                            continue;
+                        }
+                        if (this.checkPlatformCollision(platform)) {
+                            if (this.velocityY > 0) {
+                                this.y = platform.y - this.height;
+                                this.velocityY = 0;
+                                this.isGrounded = true;
+                            }
                         }
                     }
                 }
 
-                const currentPlayerDistance = player ? Math.abs(this.x - player.x) : Infinity;
-                const playerApproaching = currentPlayerDistance < this.lastPlayerDistance && currentPlayerDistance < 400;
-                this.lastPlayerDistance = currentPlayerDistance;
+                if (player) {
+                    const currentPlayerDistance = Math.abs(this.x - player.x);
+                    if (currentPlayerDistance < 600) {
+                        const playerApproaching = currentPlayerDistance < this.lastPlayerDistance && currentPlayerDistance < 400;
+                        this.lastPlayerDistance = currentPlayerDistance;
 
-                if (this.isGrounded) {
-                    this.jumpTimer++;
-                    
-                    let effectiveJumpChance = this.jumpChance;
-                    if (playerApproaching) {
-                        effectiveJumpChance *= 2.5;
-                    }
-                    
-                    if (this.type === EnemyType.JUMPER && playerApproaching) {
-                        effectiveJumpChance *= 1.5;
-                    }
-                    
-                    if (this.jumpTimer >= this.jumpCooldown) {
-                        if (Math.random() < effectiveJumpChance) {
-                            let jumpForce = this.jumpForce;
+                        if (this.isGrounded) {
+                            this.jumpTimer++;
                             
-                            if (player && playerApproaching && player.y < this.y) {
-                                jumpForce *= 1.3;
+                            let effectiveJumpChance = this.jumpChance;
+                            if (playerApproaching) {
+                                effectiveJumpChance *= 2.5;
                             }
                             
-                            this.velocityY = jumpForce;
-                            this.isGrounded = false;
-                            this.jumpTimer = 0;
-                            this.jumpCooldown = this.baseJumpCooldown + Math.random() * 60;
+                            if (this.type === EnemyType.JUMPER && playerApproaching) {
+                                effectiveJumpChance *= 1.5;
+                            }
+                            
+                            if (this.jumpTimer >= this.jumpCooldown) {
+                                if (Math.random() < effectiveJumpChance) {
+                                    let jumpForce = this.jumpForce;
+                                    
+                                    if (playerApproaching && player.y < this.y) {
+                                        jumpForce *= 1.3;
+                                    }
+                                    
+                                    this.velocityY = jumpForce;
+                                    this.isGrounded = false;
+                                    this.jumpTimer = 0;
+                                    this.jumpCooldown = this.baseJumpCooldown + Math.random() * 60;
+                                }
+                            }
                         }
                     }
                 }
@@ -823,16 +834,18 @@
 
                 if (this.health < this.getMaxHealth()) {
                     const healthPercent = this.health / this.getMaxHealth();
-                    ctx.fillStyle = `rgba(255, 255, 255, ${(1 - healthPercent) * 0.4})`;
-                    ctx.fillRect(this.x, this.y, this.width, this.height);
-                }
-
-                if (this.health < this.getMaxHealth()) {
-                    ctx.fillStyle = '#1f2937';
-                    ctx.fillRect(this.x, this.y - 10, this.width, 6);
+                    if (Math.random() < 0.8) {
+                        ctx.fillStyle = `rgba(255, 255, 255, ${(1 - healthPercent) * 0.2})`;
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                    }
                     
-                    ctx.fillStyle = healthPercent > 0.5 ? '#22c55e' : healthPercent > 0.25 ? '#eab308' : '#ef4444';
-                    ctx.fillRect(this.x, this.y - 10, this.width * healthPercent, 6);
+                    if (this.type === EnemyType.HEAVY || Math.random() < 0.6) {
+                        ctx.fillStyle = '#1f2937';
+                        ctx.fillRect(this.x, this.y - 8, this.width, 4);
+                        
+                        ctx.fillStyle = healthPercent > 0.5 ? '#22c55e' : healthPercent > 0.25 ? '#eab308' : '#ef4444';
+                        ctx.fillRect(this.x, this.y - 8, this.width * healthPercent, 4);
+                    }
                 }
             }
 
@@ -1130,7 +1143,8 @@
                 this.screenShake.duration = duration;
             }
 
-            createExplosion(x, y, color, count = 20) {
+            createExplosion(x, y, color, count = 15) {
+                if (this.particles.length > 100) return;
                 for (let i = 0; i < count; i++) {
                     this.particles.push(new Particle(x, y, color));
                 }
@@ -1234,30 +1248,45 @@
 
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const bullet = this.bullets[i];
+                    if (bullet.x < -50 || bullet.x > this.canvas.width + 50) {
+                        this.bullets.splice(i, 1);
+                        continue;
+                    }
+                    
+                    let bulletHit = false;
                     for (let j = this.enemies.length - 1; j >= 0; j--) {
                         const enemy = this.enemies[j];
+                        if (enemy.x < -100) continue;
+                        
                         if (this.checkCollision(bullet, enemy.getBounds())) {
                             this.bullets.splice(i, 1);
+                            bulletHit = true;
                             
                             if (enemy.takeDamage()) {
                                 this.createExplosion(
                                     enemy.x + enemy.width / 2,
                                     enemy.y + enemy.height / 2,
                                     enemy.color,
-                                    25
+                                    15
                                 );
-                                this.triggerScreenShake(5, 200);
+                                if (enemy.type === EnemyType.HEAVY || Math.random() < 0.7) {
+                                    this.triggerScreenShake(5, 200);
+                                }
                                 this.enemies.splice(j, 1);
                                 this.player.score += enemy.scoreValue;
-                                this.updateUI();
+                                if (enemy.scoreValue >= 200 || Math.random() < 0.3) {
+                                    this.updateUI();
+                                }
                             } else {
                                 this.createExplosion(
                                     enemy.x + enemy.width / 2,
                                     enemy.y + enemy.height / 2,
                                     '#fbbf24',
-                                    10
+                                    8
                                 );
-                                this.triggerScreenShake(3, 100);
+                                if (Math.random() < 0.4) {
+                                    this.triggerScreenShake(2, 80);
+                                }
                             }
                             break;
                         }
