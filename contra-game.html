@@ -216,7 +216,8 @@
             DIFFICULTY_INCREASE_SCORE: 500,
             MAP_SCROLL_SPEED: 1.5,
             PLATFORM_SPAWN_INTERVAL: 180,
-            WAVE_SPAWN_CHANCE: 0.15
+            WAVE_SPAWN_CHANCE: 0.15,
+            MAX_ENEMIES_ON_SCREEN: 8
         };
 
         // ============================================
@@ -1107,19 +1108,36 @@
 
                 const isWaveSpawn = Math.random() < CONFIG.WAVE_SPAWN_CHANCE + this.difficulty * 0.03;
                 
+                const currentScreenEnemies = this.enemies.filter(e => 
+                    e.x > -50 && e.x < this.canvas.width + 50
+                ).length;
+                
                 if (isWaveSpawn) {
-                    const waveSize = Math.min(2 + Math.floor(this.difficulty / 2), 4);
+                    const maxWaveSize = CONFIG.MAX_ENEMIES_ON_SCREEN - currentScreenEnemies;
+                    if (maxWaveSize <= 0) return;
+                    
+                    const waveSize = Math.min(2 + Math.floor(this.difficulty / 2), maxWaveSize, 4);
                     for (let i = 0; i < waveSize; i++) {
-                        setTimeout(() => {
-                            if (this.state === GameState.PLAYING) {
-                                const waveX = this.canvas.width + 50 + i * 60;
-                                const waveY = this.groundY - 40 - (i % 2) * 50;
-                                const waveType = i === 0 ? selectedType : 
-                                    (Math.random() < 0.7 ? EnemyType.NORMAL : 
-                                     Math.random() < 0.5 ? EnemyType.FAST : EnemyType.JUMPER);
-                                this.enemies.push(new Enemy(waveX, waveY, this, waveType));
-                            }
-                        }, i * 200);
+                        const waveX = this.canvas.width + 50 + i * 60;
+                        const waveY = this.groundY - 40 - (i % 2) * 50;
+                        const waveType = i === 0 ? selectedType : 
+                            (Math.random() < 0.7 ? EnemyType.NORMAL : 
+                             Math.random() < 0.5 ? EnemyType.FAST : EnemyType.JUMPER);
+                        
+                        if (i === 0) {
+                            this.enemies.push(new Enemy(waveX, waveY, this, waveType));
+                        } else {
+                            setTimeout(() => {
+                                if (this.state === GameState.PLAYING) {
+                                    const screenEnemiesNow = this.enemies.filter(e => 
+                                        e.x > -50 && e.x < this.canvas.width + 50
+                                    ).length;
+                                    if (screenEnemiesNow < CONFIG.MAX_ENEMIES_ON_SCREEN) {
+                                        this.enemies.push(new Enemy(waveX, waveY, this, waveType));
+                                    }
+                                }
+                            }, i * 200);
+                        }
                     }
                 } else {
                     this.enemies.push(new Enemy(x, spawnY, this, selectedType));
@@ -1224,7 +1242,12 @@
                 const effectiveInterval = this.enemySpawnInterval + 
                     (Math.random() - 0.5) * CONFIG.ENEMY_SPAWN_RANDOMNESS * 2;
                 
-                if (this.enemySpawnTimer >= effectiveInterval) {
+                const screenEnemies = this.enemies.filter(e => 
+                    e.x > -50 && e.x < this.canvas.width + 50
+                ).length;
+                
+                if (this.enemySpawnTimer >= effectiveInterval && 
+                    screenEnemies < CONFIG.MAX_ENEMIES_ON_SCREEN) {
                     this.spawnEnemy();
                     this.enemySpawnTimer = 0;
                 }
