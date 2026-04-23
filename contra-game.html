@@ -247,12 +247,10 @@
         class Background {
             constructor(canvas) {
                 this.canvas = canvas;
-                this.layers = [
-                    { speed: 0.2, offset: 0, color: '#0a1628' },
-                    { speed: 0.5, offset: 0, color: '#1a2a4a' },
-                    { speed: 0.8, offset: 0, color: '#2a3a5a' }
-                ];
-                this.stars = this.createStars(50);
+                this.offset = 0;
+                this.stars = this.createStars(80);
+                this.mountainOffsets = [0, 0, 0];
+                this.mountainSpeeds = [0.2, 0.4, 0.6];
             }
 
             createStars(count) {
@@ -262,56 +260,67 @@
                         x: Math.random() * this.canvas.width,
                         y: Math.random() * (this.canvas.height - CONFIG.GROUND_HEIGHT),
                         size: Math.random() * 2 + 1,
-                        speed: Math.random() * 0.3 + 0.1
+                        speed: Math.random() * 0.2 + 0.05,
+                        twinkle: Math.random() * Math.PI * 2
                     });
                 }
                 return stars;
             }
 
             update() {
-                this.layers.forEach(layer => {
-                    layer.offset += layer.speed;
-                    if (layer.offset >= this.canvas.width) {
-                        layer.offset = 0;
-                    }
-                });
-
+                this.offset += 1;
+                
                 this.stars.forEach(star => {
                     star.x -= star.speed;
-                    if (star.x < 0) {
-                        star.x = this.canvas.width;
+                    star.twinkle += 0.05;
+                    if (star.x < -10) {
+                        star.x = this.canvas.width + 10;
                         star.y = Math.random() * (this.canvas.height - CONFIG.GROUND_HEIGHT);
                     }
                 });
+
+                for (let i = 0; i < 3; i++) {
+                    this.mountainOffsets[i] -= this.mountainSpeeds[i];
+                    if (this.mountainOffsets[i] <= -400) {
+                        this.mountainOffsets[i] = 0;
+                    }
+                }
             }
 
             draw(ctx) {
-                this.layers.forEach(layer => {
-                    ctx.fillStyle = layer.color;
-                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height - CONFIG.GROUND_HEIGHT);
-                });
+                const gradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height - CONFIG.GROUND_HEIGHT);
+                gradient.addColorStop(0, '#0a1628');
+                gradient.addColorStop(0.5, '#1a2a4a');
+                gradient.addColorStop(1, '#2a3a5a');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, this.canvas.width, this.canvas.height - CONFIG.GROUND_HEIGHT);
 
-                ctx.fillStyle = '#ffffff';
                 this.stars.forEach(star => {
-                    ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+                    const alpha = 0.4 + Math.sin(star.twinkle) * 0.4;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
                     ctx.fillRect(star.x, star.y, star.size, star.size);
                 });
-                ctx.globalAlpha = 1.0;
 
-                this.drawMountains(ctx, '#1e3a5f', 0.3, this.canvas.height - CONFIG.GROUND_HEIGHT - 150);
-                this.drawMountains(ctx, '#2d4a6f', 0.5, this.canvas.height - CONFIG.GROUND_HEIGHT - 80);
-                this.drawMountains(ctx, '#3d5a7f', 0.7, this.canvas.height - CONFIG.GROUND_HEIGHT - 40);
+                this.drawMountainLayer(ctx, 0, '#0f2744', this.canvas.height - CONFIG.GROUND_HEIGHT - 180);
+                this.drawMountainLayer(ctx, 1, '#1a3a5c', this.canvas.height - CONFIG.GROUND_HEIGHT - 120);
+                this.drawMountainLayer(ctx, 2, '#2a4a6c', this.canvas.height - CONFIG.GROUND_HEIGHT - 60);
             }
 
-            drawMountains(ctx, color, speed, baseY) {
+            drawMountainLayer(ctx, layerIndex, color, baseY) {
                 ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.moveTo(0, this.canvas.height - CONFIG.GROUND_HEIGHT);
                 
-                const offset = Date.now() * speed * 0.01 % 200;
-                for (let x = -offset; x <= this.canvas.width + 200; x += 100) {
-                    const height = Math.sin(x * 0.01 + offset * 0.01) * 50 + 60;
-                    ctx.lineTo(x, baseY - height);
+                const offset = this.mountainOffsets[layerIndex];
+                const peakSpacing = 150;
+                const peakHeight = 80 + layerIndex * 30;
+                
+                for (let x = offset; x <= this.canvas.width + 400; x += peakSpacing) {
+                    const heightVariation = Math.sin(x * 0.005 + layerIndex) * 30;
+                    const currentHeight = peakHeight + heightVariation;
+                    
+                    ctx.lineTo(x, baseY - currentHeight);
+                    ctx.lineTo(x + peakSpacing / 2, baseY);
                 }
                 
                 ctx.lineTo(this.canvas.width, this.canvas.height - CONFIG.GROUND_HEIGHT);
@@ -422,21 +431,13 @@
                     this.velocityX = this.speed;
                     this.faceRight = true;
                 }
-                if (keys.up) {
-                    this.velocityY = -this.speed;
-                }
-                if (keys.down) {
-                    this.velocityY = this.speed;
-                }
 
                 if (keys.jump && this.isGrounded) {
                     this.velocityY = this.jumpForce;
                     this.isGrounded = false;
                 }
 
-                if (!keys.jump && !keys.up && !keys.down) {
-                    this.velocityY += CONFIG.GRAVITY;
-                }
+                this.velocityY += CONFIG.GRAVITY;
 
                 this.x += this.velocityX;
                 this.y += this.velocityY;
@@ -461,7 +462,10 @@
                     }
                 }
 
-                if (this.y < 0) this.y = 0;
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velocityY = Math.max(0, this.velocityY);
+                }
 
                 if (this.isInvincible) {
                     this.invincibleTimer -= 16.67;
